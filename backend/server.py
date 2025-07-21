@@ -58,6 +58,21 @@ async def get_status_checks():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Include team routes with database dependency
+def get_db():
+    return db
+
+# Add database dependency to team router
+for route in team_router.routes:
+    if hasattr(route, 'dependant'):
+        # Inject database dependency
+        route.dependant.dependencies.append(
+            type('DBDependency', (), {'dependency': lambda: db})()
+        )
+
+# Include team router
+app.include_router(team_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
