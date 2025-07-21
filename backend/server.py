@@ -58,31 +58,9 @@ async def get_status_checks():
 # Include the router in the main app
 app.include_router(api_router)
 
-# Create database dependency function
-async def get_database():
-    return db
-
-# Update team routes to use dependency injection
+# Set up database for team routes
 import team_routes
-
-# Replace the Depends() calls in team_routes with our database
-async def get_team_collection_with_db():
-    return db.teams
-
-async def get_materials_collection_with_db():
-    return db.team_materials
-
-async def get_messages_collection_with_db():
-    return db.team_messages
-
-async def get_courses_collection_with_db():
-    return db.courses
-
-# Patch the team_routes functions
-team_routes.get_team_collection = lambda db: db.teams
-team_routes.get_materials_collection = lambda db: db.team_materials  
-team_routes.get_messages_collection = lambda db: db.team_messages
-team_routes.get_courses_collection = lambda db: db.courses
+team_routes.db_instance = db
 
 # Include team router
 app.include_router(team_router)
