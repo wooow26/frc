@@ -55,6 +55,84 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
+# Import models for courses
+from models import Course, TeamProfile
+
+# Get all courses with team information
+@api_router.get("/courses")
+async def get_all_courses():
+    courses = await db.courses.find().to_list(1000)
+    
+    # Enrich courses with team information
+    enriched_courses = []
+    for course in courses:
+        course_obj = Course(**course)
+        
+        # Get instructor team info if available
+        instructor_team = None
+        if course_obj.instructor_team_id:
+            team_doc = await db.teams.find_one({"id": course_obj.instructor_team_id})
+            if team_doc:
+                team_doc.pop("password_hash", None)
+                instructor_team = TeamProfile(**team_doc)
+        
+        enriched_courses.append({
+            **course_obj.dict(),
+            "instructor_team": instructor_team.dict() if instructor_team else None
+        })
+    
+    return enriched_courses
+
+# Get single course with team information
+@api_router.get("/courses/{course_id}")
+async def get_course(course_id: str):
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found"
+        )
+    
+    course_obj = Course(**course)
+    
+    # Get instructor team info
+    instructor_team = None
+    if course_obj.instructor_team_id:
+        team_doc = await db.teams.find_one({"id": course_obj.instructor_team_id})
+        if team_doc:
+            team_doc.pop("password_hash", None)
+            instructor_team = TeamProfile(**team_doc)
+    
+    return {
+        **course_obj.dict(),
+        "instructor_team": instructor_team.dict() if instructor_team else None
+    }
+
+# Get public materials (materials marked as public)
+@api_router.get("/materials/public")
+async def get_public_materials():
+    materials = await db.team_materials.find({"is_public": True}).to_list(1000)
+    
+    # Enrich with team information
+    enriched_materials = []
+    for material in materials:
+        team_doc = await db.teams.find_one({"id": material["team_id"]})
+        team_info = None
+        if team_doc:
+            team_doc.pop("password_hash", None)
+            team_info = {
+                "team_name": team_doc.get("team_name"),
+                "logo_url": team_doc.get("logo_url"),
+                "social_media": team_doc.get("social_media", {})
+            }
+        
+        enriched_materials.append({
+            **material,
+            "team_info": team_info
+        })
+    
+    return enriched_materials
+
 # Include the router in the main app
 app.include_router(api_router)
 
