@@ -10,6 +10,9 @@ from typing import List
 import uuid
 from datetime import datetime
 
+# Import team routes
+from team_routes import router as team_router
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
