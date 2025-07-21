@@ -18,22 +18,17 @@ from auth import (
 # This will be injected in server.py
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
-async def get_team_collection(db: AsyncIOMotorDatabase):
-    return db.teams
+# Database dependency will be set in server.py
+db_instance = None
 
-async def get_materials_collection(db: AsyncIOMotorDatabase):
-    return db.team_materials
-
-async def get_messages_collection(db: AsyncIOMotorDatabase):
-    return db.team_messages
-
-async def get_courses_collection(db: AsyncIOMotorDatabase):
-    return db.courses
+def get_db():
+    return db_instance
 
 # Team Registration
 @router.post("/register", response_model=TeamToken)
-async def register_team(request: TeamRegistrationRequest, db: AsyncIOMotorDatabase = Depends()):
-    teams_collection = await get_team_collection(db)
+async def register_team(request: TeamRegistrationRequest):
+    db = get_db()
+    teams_collection = db.teams
     
     # Check if team already exists
     existing_team = await teams_collection.find_one({
@@ -86,8 +81,9 @@ async def register_team(request: TeamRegistrationRequest, db: AsyncIOMotorDataba
 
 # Team Login
 @router.post("/login", response_model=TeamToken)
-async def login_team(login_data: TeamLogin, db: AsyncIOMotorDatabase = Depends()):
-    teams_collection = await get_team_collection(db)
+async def login_team(login_data: TeamLogin):
+    db = get_db()
+    teams_collection = db.teams
     
     # Find team by email
     team_doc = await teams_collection.find_one({"contact_email": login_data.email})
@@ -115,11 +111,9 @@ async def login_team(login_data: TeamLogin, db: AsyncIOMotorDatabase = Depends()
 
 # Get Team Profile
 @router.get("/profile", response_model=TeamProfile)
-async def get_team_profile(
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
-):
-    teams_collection = await get_team_collection(db)
+async def get_team_profile(current_team: dict = Depends(get_current_team)):
+    db = get_db()
+    teams_collection = db.teams
     
     team_doc = await teams_collection.find_one({"id": current_team["team_id"]})
     if not team_doc:
@@ -135,10 +129,10 @@ async def get_team_profile(
 @router.put("/profile", response_model=TeamProfile)
 async def update_team_profile(
     update_data: TeamUpdateRequest,
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
+    current_team: dict = Depends(get_current_team)
 ):
-    teams_collection = await get_team_collection(db)
+    db = get_db()
+    teams_collection = db.teams
     
     # Build update document
     update_doc = {}
@@ -182,10 +176,10 @@ async def update_team_profile(
 @router.post("/materials", response_model=TeamMaterial)
 async def upload_material(
     material_data: MaterialUploadRequest,
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
+    current_team: dict = Depends(get_current_team)
 ):
-    materials_collection = await get_materials_collection(db)
+    db = get_db()
+    materials_collection = db.team_materials
     
     # Validate file size (limit to 50MB)
     try:
@@ -228,11 +222,9 @@ async def upload_material(
 
 # Get Team Materials
 @router.get("/materials", response_model=List[TeamMaterial])
-async def get_team_materials(
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
-):
-    materials_collection = await get_materials_collection(db)
+async def get_team_materials(current_team: dict = Depends(get_current_team)):
+    db = get_db()
+    materials_collection = db.team_materials
     
     # Get materials for current team
     materials = await materials_collection.find(
@@ -245,10 +237,10 @@ async def get_team_materials(
 @router.delete("/materials/{material_id}")
 async def delete_material(
     material_id: str,
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
+    current_team: dict = Depends(get_current_team)
 ):
-    materials_collection = await get_materials_collection(db)
+    db = get_db()
+    materials_collection = db.team_materials
     
     # Delete material (only if it belongs to current team)
     result = await materials_collection.delete_one({
@@ -266,8 +258,9 @@ async def delete_material(
 
 # Get Public Team Profile (for course instructor display)
 @router.get("/{team_id}/public", response_model=TeamProfile)
-async def get_public_team_profile(team_id: str, db: AsyncIOMotorDatabase = Depends()):
-    teams_collection = await get_team_collection(db)
+async def get_public_team_profile(team_id: str):
+    db = get_db()
+    teams_collection = db.teams
     
     team_doc = await teams_collection.find_one({"id": team_id})
     if not team_doc or not team_doc.get("is_active", True):
@@ -276,21 +269,18 @@ async def get_public_team_profile(team_id: str, db: AsyncIOMotorDatabase = Depen
             detail="Team not found"
         )
     
-    # Remove sensitive information
+    # Remove sensitive information for public view
     team_doc.pop("password_hash", None)
-    team_doc.pop("contact_email", None)  # Hide email in public view
+    # Keep contact email visible for instructor contact
     
     return TeamProfile(**team_doc)
 
 # Contact Team
 @router.post("/{team_id}/contact")
-async def contact_team(
-    team_id: str,
-    contact_data: ContactTeamRequest,
-    db: AsyncIOMotorDatabase = Depends()
-):
-    teams_collection = await get_team_collection(db)
-    messages_collection = await get_messages_collection(db)
+async def contact_team(team_id: str, contact_data: ContactTeamRequest):
+    db = get_db()
+    teams_collection = db.teams
+    messages_collection = db.team_messages
     
     # Verify team exists
     team_doc = await teams_collection.find_one({"id": team_id})
@@ -326,11 +316,9 @@ async def contact_team(
 
 # Get Team Messages (for teams to see their messages)
 @router.get("/messages", response_model=List[TeamContactMessage])
-async def get_team_messages(
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
-):
-    messages_collection = await get_messages_collection(db)
+async def get_team_messages(current_team: dict = Depends(get_current_team)):
+    db = get_db()
+    messages_collection = db.team_messages
     
     messages = await messages_collection.find(
         {"to_team_id": current_team["team_id"]}
@@ -342,10 +330,10 @@ async def get_team_messages(
 @router.put("/messages/{message_id}/read")
 async def mark_message_read(
     message_id: str,
-    current_team: dict = Depends(get_current_team),
-    db: AsyncIOMotorDatabase = Depends()
+    current_team: dict = Depends(get_current_team)
 ):
-    messages_collection = await get_messages_collection(db)
+    db = get_db()
+    messages_collection = db.team_messages
     
     result = await messages_collection.update_one(
         {"id": message_id, "to_team_id": current_team["team_id"]},
